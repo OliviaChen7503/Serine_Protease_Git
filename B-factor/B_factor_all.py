@@ -2,25 +2,29 @@ import MDAnalysis as mda
 import numpy as np
 import matplotlib.pyplot as plt
 
-# 文件名列表
-pdb_files = ["2GCH/2GCH.updated_refine_001_ensemble.pdb", "1AFQ/1AFQ.updated_refine_001_ensemble.pdb", "3VGC/3VGC.updated_refine_001_ensemble.pdb"]
+# List of file names
+pdb_files = [
+    "2GCH/2GCH.updated_refine_001_ensemble.pdb",
+    "1AFQ/1AFQ.updated_refine_001_ensemble.pdb",
+    "3VGC/3VGC.updated_refine_001_ensemble.pdb"
+]
 labels = ["2GCH(APO)", "1AFQ(GSA)", "3VGC(TSA)"]
 colors = ["r", "g", "b"]
 
-# 存储所有模型的 B-factor
+# Store B-factors from all models
 bfactors_all = []
 
 for pdb in pdb_files:
     u = mda.Universe(pdb)
-    ca = u.select_atoms("name CA")  # 只选Cα原子
+    ca = u.select_atoms("name CA")  # Select only Cα atoms
     bfactors = ca.tempfactors
     bfactors_all.append(bfactors)
 
-# 确保所有长度一致
+# Ensure all sequences have the same length
 min_len = min(len(b) for b in bfactors_all)
-bfactors_all = [b[:min_len] for b in bfactors_all]  # 截断到最短长度
+bfactors_all = [b[:min_len] for b in bfactors_all]  # Truncate to the shortest length
 
-# 绘图
+# Plotting
 residue_indices = np.arange(1, min_len + 1)
 plt.figure(figsize=(12, 6))
 
@@ -35,4 +39,3 @@ plt.grid(True, linestyle="--", alpha=0.5)
 plt.tight_layout()
 plt.savefig("bfactor_comparison.png", dpi=300)
 plt.show()
-

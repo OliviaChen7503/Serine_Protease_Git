@@ -6,55 +6,60 @@ import matplotlib.pyplot as plt
 import glob
 import os
 
-# ---------- 新增函数：生成唯一残基标识 ----------
+
+# ---------- New function: generate unique residue identifier ----------
 def get_residue_id(res):
-    """生成包含插入码的唯一残基标识符（格式：残基名+序列号+插入码）"""
+    """Generate a unique residue ID including insertion code (format: resname + seq number + icode)"""
     seqnum = res.get_id()[1]
-    icode = res.get_id()[2].strip()  # 获取插入码并去除空格
+    icode = res.get_id()[2].strip()  # Get insertion code and strip whitespace
     return f"{res.get_resname()}{seqnum}{icode}"
 
-# ---------- 修改后的核心函数 ----------
+
+# ---------- Modified core function ----------
 def compute_cooccurrence_multi(structures, distance_threshold=4.0):
     cooccurrence = {}
 
     for structure in structures:
         model = structure[0]
         residues = list(model.get_residues())
-        seen_pairs = set()  # 记录当前结构已处理的残基对
+        seen_pairs = set()  # Record processed residue pairs for current structure
 
         for i, res1 in enumerate(residues):
             for j, res2 in enumerate(residues):
                 if i >= j:
-                    continue  # 避免重复对(i,j)和(j,i)
+                    continue  # Skip duplicates (i,j) and (j,i)
 
-                # 生成唯一键（排序后保证顺序无关）
+                # Generate sorted key to ensure pair order independence
                 pair_key = tuple(sorted([get_residue_id(res1), get_residue_id(res2)]))
-                
-                # 跳过已处理的残基对
+
+                # Skip if pair already processed
                 if pair_key in seen_pairs:
                     continue
                 seen_pairs.add(pair_key)
 
-                # 计算非氢原子间最小距离
+                # Compute minimal distance between heavy atoms
                 min_dist = min(
                     (atom1 - atom2 for atom1 in res1 if atom1.element != 'H'
                      for atom2 in res2 if atom2.element != 'H'),
-                    default=float('inf')  # 若无原子对，设距离为无穷大
+                    default=float('inf')  # If no atom pairs, set to infinity
                 )
 
-                # 满足距离阈值则计数
+                # Count if within threshold
                 if min_dist <= distance_threshold:
                     cooccurrence[pair_key] = cooccurrence.get(pair_key, 0) + 1
 
     return cooccurrence
 
-# ---------- 其余函数保持不变 ----------
+
+# ---------- Remaining functions unchanged ----------
 def load_structures(pdb_files):
     parser = Bio.PDB.PDBParser(QUIET=True)
     return [parser.get_structure(f"protein_{i}", file) for i, file in enumerate(pdb_files)]
 
+
 def normalize_cooccurrence(cooccurrence, num_structures):
     return {pair: count / num_structures for pair, count in cooccurrence.items()}
+
 
 def build_network(cooccurrence):
     G = nx.Graph()
@@ -62,47 +67,50 @@ def build_network(cooccurrence):
         G.add_edge(res1, res2, weight=freq)
     return G
 
+
 def plot_network(G):
     plt.figure(figsize=(12, 8))
     pos = nx.spring_layout(G, seed=42)
     edges = G.edges(data=True)
     edge_weights = [data["weight"] for _, _, data in edges]
 
-    nx.draw(G, pos, with_labels=True, 
-            node_color="skyblue", 
+    nx.draw(G, pos, with_labels=True,
+            node_color="skyblue",
             edge_color=edge_weights,
-            edge_cmap=plt.cm.Blues, 
-            node_size=500, 
-            font_size=10, 
+            edge_cmap=plt.cm.Blues,
+            node_size=500,
+            font_size=10,
             width=2)
 
-    plt.savefig("TSA_residue_network.png", dpi=300) ################NEED CHANGE################
-    
-    # 保存权重到CSV
+    plt.savefig("TSA_residue_network.png", dpi=300)  ################NEED CHANGE################
+
+    # Save weights to CSV
     edge_df = pd.DataFrame(
         [(res1, res2, data["weight"]) for res1, res2, data in G.edges(data=True)],
         columns=["Residue1", "Residue2", "Weight"]
     )
-    edge_df.to_csv("TSA_residue_network_weights.csv", index=False) ##############NEED CHANGE###############
+    edge_df.to_csv("TSA_residue_network_weights.csv", index=False)  ##############NEED CHANGE###############
 
-# ---------- 主流程 ----------
+
+# ---------- Main pipeline ----------
 if __name__ == "__main__":
-    # 加载PDB文件（示例路径，需根据实际情况修改）
-    pdb_files = glob.glob("/dors/wankowicz_lab/serine_protease/Chymotrypsin/TSA/*.pdb")[:3] ##########NEED CHANGE#########
+    # Load PDB files (example path; modify as needed)
+    pdb_files = glob.glob("/dors/wankowicz_lab/serine_protease/Chymotrypsin/TSA/*.pdb")[
+                :3]  ##########NEED CHANGE#########
     print(f"Processing {len(pdb_files)} PDB files:")
     for f in pdb_files:
         print(" -", os.path.basename(f))
-    
+
     structures = load_structures(pdb_files)
-    
-    # 计算共现并归一化
+
+    # Compute and normalize co-occurrence
     cooccurrence = compute_cooccurrence_multi(structures)
     normalized_cooccurrence = normalize_cooccurrence(cooccurrence, len(pdb_files))
-    
-    # 验证最大权重是否≤1
+
+    # Check if max weight ≤ 1
     max_weight = max(normalized_cooccurrence.values()) if normalized_cooccurrence else 0
-    print(f"\n验证结果：最大权重值 = {max_weight:.2f} (应≤1.0)\n")
-    
-    # 构建网络并输出
+    print(f"\nValidation: max weight = {max_weight:.2f} (should be ≤ 1.0)\n")
+
+    # Build network and output
     G = build_network(normalized_cooccurrence)
     plot_network(G)
